@@ -2,73 +2,103 @@ import streamlit as st
 import google.generativeai as genai
 from PIL import Image
 from dotenv import load_dotenv
-import io
 import os
 
-# Load environment variables from .env file
 load_dotenv()
-
-# Retrieve API key from environment variables
-my_api_key = os.getenv('my_api_key')
-
-# Configure Google Gemini API key
+my_api_key = os.getenv("my_api_key")
 genai.configure(api_key=my_api_key)
 
-# Set page configuration
-st.set_page_config(page_title="Gemini Nutrition AI ")
+st.set_page_config(page_title="Advanced Nutrition AI", layout="wide")
 
+# --- Sidebar: Choose Scenario ---
+st.sidebar.title("Nutrition AI Scenarios")
+scenario = st.sidebar.radio(
+    "Choose what you want to do:",
+    ("Dynamic Nutritional Insights", "Tailored Meal Planning", "Virtual Nutrition Coaching"),
+)
 
+# --- Scenario 1: Tailored Meal Planning ---
+if scenario == "Tailored Meal Planning":
+    st.title("🍽️ Tailored Meal Planning")
+    st.write(
+        "Provide your dietary details and preferences. Gemini AI will generate a meal plan!"
+    )
+    col1, col2 = st.columns(2)
+    with col1:
+        dietary_restrictions = st.text_area("Dietary restrictions or allergies")
+        health_conditions = st.text_area("Health conditions")
+    with col2:
+        activity_level = st.selectbox(
+            "Activity level",
+            ["Sedentary", "Lightly active", "Moderately active", "Very active"],
+        )
+        taste_preferences = st.text_area("Taste preferences")
 
+    submit = st.button("Generate Meal Plan")
+    if submit:
+        prompt = f"""
+        You are a nutrition expert. Create a week-long meal plan with recipes and grocery lists.
+        Dietary restrictions: {dietary_restrictions}
+        Health conditions: {health_conditions}
+        Activity level: {activity_level}
+        Taste preferences: {taste_preferences}
+        Ensure nutritional balance, variety, and enjoyment.
+        """
+        model = genai.GenerativeModel("gemini-1.5-flash")
+        response = model.generate_content(prompt)
+        st.subheader("Your Personalized Meal Plan")
+        st.write(response.text)
 
-## Function to load Google Gemini Pro Vision API And get response
-def get_gemini_response(input, image, prompt):
-    model = genai.GenerativeModel('gemini-1.5-flash')
-    response = model.generate_content([input, image[0], prompt])
-    return response.text
+# --- Scenario 2: Dynamic Nutritional Insights ---
+elif scenario == "Dynamic Nutritional Insights":
+    st.title("📸 Dynamic Nutritional Insights")
+    st.write("Upload an image of food or input its name for detailed nutritional analysis.")
+    input_text = st.text_input("Food item name (optional)", key="food_input")
+    uploaded_file = st.file_uploader("Upload an image...", type=["jpg", "jpeg", "png"])
 
-
-def input_image_setup(uploaded_file):
-    # Check if a file has been uploaded
+    image_data = ""
     if uploaded_file is not None:
-        # Read the file into bytes
+        image = Image.open(uploaded_file)
+        st.image(image, caption="Uploaded Image", use_column_width=True)
+
         bytes_data = uploaded_file.getvalue()
-
-        image_parts = [
-            {
-                "mime_type": uploaded_file.type,  # Get the mime type of the uploaded file
-                "data": bytes_data
-            }
+        image_data = [
+            {"mime_type": uploaded_file.type, "data": bytes_data}
         ]
-        return image_parts
-    else:
-        raise FileNotFoundError("No file uploaded")
-    
-##initialize our streamlit app
-st.title("Gemini Nutrition AI ")
 
-input_text = st.text_input("Input Prompt: ", key="input")
-uploaded_file = st.file_uploader("Choose an image...", type=["jpg", "jpeg", "png"])
-image = ""   
-if uploaded_file is not None:
-    image = Image.open(uploaded_file)
-    st.image(image, caption="Uploaded Image.", use_column_width=True)
+    submit = st.button("Analyze Nutrition")
+    if submit:
+        prompt = f"""
+        You are a nutritionist. Provide a detailed breakdown of macronutrients, micronutrients, and calories
+        for this food. Present it clearly.
+        """
+        model = genai.GenerativeModel("gemini-1.5-flash")
+        if image_data:
+            response = model.generate_content([prompt, image_data[0], input_text])
+        else:
+            response = model.generate_content(f"{prompt} Food: {input_text}")
+        st.subheader("Nutrition Analysis")
+        st.write(response.text)
 
-submit = st.button("Tell me the total calories")
+# --- Scenario 3: Virtual Nutrition Coaching ---
+else:
+    st.title("💬 Virtual Nutrition Coaching")
+    st.write("Ask any nutrition-related question to your AI coach.")
 
-input_prompt="""
-You are an expert in nutritionist where you need to see the food items from the image
-and calculate the total calories, also provide the details of every food items with calories intake
-in the following format:
+    if "chat_history" not in st.session_state:
+        st.session_state.chat_history = []
 
-1. Item 1 - number of calories
-2. Item 2 - number of calories
----
----
-"""
+    user_input = st.text_input("Type your question here...")
+    if st.button("Ask Coach"):
+        model = genai.GenerativeModel("gemini-1.5-flash")
+        response = model.generate_content(
+            f"You are a professional nutrition coach. Answer this user question with empathy and precision: {user_input}"
+        )
+        st.session_state.chat_history.append(("You", user_input))
+        st.session_state.chat_history.append(("Coach", response.text))
 
-## If submit button is clicked
-if submit:
-    image_data = input_image_setup(uploaded_file)
-    response = get_gemini_response(input_prompt, image_data, input_text)
-    st.subheader("The Response is")
-    st.write(response)
+    for speaker, message in st.session_state.chat_history:
+        if speaker == "You":
+            st.write(f"🧑‍💻 **{speaker}:** {message}")
+        else:
+            st.write(f"🤖 **{speaker}:** {message}")
